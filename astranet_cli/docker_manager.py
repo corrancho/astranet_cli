@@ -1,0 +1,366 @@
+"""
+Docker Manager - Gestión de Docker Engine
+"""
+
+from pathlib import Path
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.prompt import Prompt, Confirm
+from rich import box
+
+from .system_utils import SystemUtils
+
+console = Console()
+
+
+class DockerManager(SystemUtils):
+    """Manager para Docker Engine"""
+    
+    def __init__(self):
+        super().__init__()
+        self.docker_version = "N/A"
+    
+    def is_docker_installed(self) -> bool:
+        """Verifica si Docker está instalado"""
+        return self.check_command_exists("docker")
+    
+    def get_docker_version(self) -> str:
+        """Obtiene la versión de Docker"""
+        if not self.is_docker_installed():
+            return "N/A"
+        
+        returncode, stdout, _ = self.run_command("docker --version 2>/dev/null | awk '{print $3}' | tr -d ','")
+        if returncode == 0 and stdout.strip():
+            return stdout.strip()
+        return "N/A"
+    
+    def is_docker_running(self) -> bool:
+        """Verifica si Docker daemon está corriendo"""
+        returncode, _, _ = self.run_command("systemctl is-active docker 2>/dev/null")
+        return returncode == 0
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # Métodos extraídos de K8sInstaller
+    # ═══════════════════════════════════════════════════════════════════
+    
+    def install_docker(self) -> bool:
+        """Instala Docker CE"""
+        console.print(Panel.fit(
+            "🐳 Instalando Docker CE",
+            style="bold blue"
+        ))
+        
+        # Verificar si ya está instalado
+        returncode, _, _ = self.run_command("docker --version 2>/dev/null")
+        if returncode == 0:
+            console.print("✓ [green]Docker ya está instalado[/green]\n")
+            return True
+        
+        console.print("[cyan]Instalando Docker desde repositorio oficial...[/cyan]\n")
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            
+            # Instalar dependencias
+            task = progress.add_task("[cyan]Instalando dependencias...", total=1)
+            self.run_command("apt-get update", sudo=True)
+            self.run_command("apt-get install -y ca-certificates curl gnupg", sudo=True)
+            progress.update(task, advance=1)
+            
+            # Agregar clave GPG de Docker
+            task = progress.add_task("[cyan]Agregando repositorio Docker...", total=1)
+            self.run_command("install -m 0755 -d /etc/apt/keyrings", sudo=True)
+            self.run_command(
+                "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | "
+                "sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
+                sudo=False
+            )
+            self.run_command("chmod a+r /etc/apt/keyrings/docker.gpg", sudo=True)
+            progress.update(task, advance=1)
+            
+            # Agregar repositorio
+            task = progress.add_task("[cyan]Configurando repositorio...", total=1)
+            arch = self.os_info["machine"]
+            if arch == "x86_64":
+                arch = "amd64"
+            elif arch == "aarch64":
+                arch = "arm64"
+            
+            distro = self.os_info["distro"]
+            version_codename = subprocess.run(
+                "grep VERSION_CODENAME /etc/os-release | cut -d= -f2",
+                shell=True,
+                capture_output=True,
+                text=True
+            ).stdout.strip()
+            
+            self.run_command(
+                f'echo "deb [arch={arch} signed-by=/etc/apt/keyrings/docker.gpg] '
+                f'https://download.docker.com/linux/ubuntu {version_codename} stable" | '
+                'sudo tee /etc/apt/sources.list.d/docker.list',
+                sudo=False
+            )
+            self.run_command("apt-get update", sudo=True)
+            progress.update(task, advance=1)
+            
+            # Instalar Docker
+            task = progress.add_task("[cyan]Instalando Docker Engine...", total=1)
+            self.run_command(
+                "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
+                sudo=True
+            )
+            progress.update(task, advance=1)
+            
+            # Agregar usuario al grupo docker
+            task = progress.add_task("[cyan]Configurando permisos...", total=1)
+            if self.sudo_user != "root":
+                self.run_command(f"usermod -aG docker {self.sudo_user}", sudo=True)
+                console.print(f"\n[yellow]Nota: Necesitarás cerrar sesión y volver a entrar para usar docker sin sudo[/yellow]")
+            progress.update(task, advance=1)
+            
+            # Iniciar y habilitar Docker
+            task = progress.add_task("[cyan]Iniciando servicio Docker...", total=1)
+            self.run_command("systemctl start docker", sudo=True)
+            self.run_command("systemctl enable docker", sudo=True)
+            progress.update(task, advance=1)
+        
+        # Verificar instalación
+        returncode, stdout, _ = self.run_command("docker --version")
+        if returncode == 0:
+            console.print(f"\n✓ [bold green]Docker instalado correctamente: {stdout.strip()}[/bold green]\n")
+            return True
+        else:
+            console.print("\n✗ [red]Error al instalar Docker[/red]\n")
+            return False
+    
+    def uninstall_docker(self) -> bool:
+        """Desinstala Docker CE completamente"""
+        console.print(Panel.fit(
+            "🗑️  Desinstalando Docker CE",
+            style="bold red"
+        ))
+        
+        # Verificar si está instalado
+        returncode, _, _ = self.run_command("docker --version 2>/dev/null")
+        if returncode != 0:
+            console.print("✓ [yellow]Docker no está instalado[/yellow]\n")
+            return True
+        
+        console.print("[yellow]Se eliminarán los siguientes componentes:[/yellow]")
+        console.print("  • Docker Engine (docker-ce)")
+        console.print("  • Docker CLI (docker-ce-cli)")
+        console.print("  • Docker Compose plugin")
+        console.print("  • Imágenes y contenedores")
+        console.print("  • Volúmenes")
+        console.print("  • Configuraciones")
+        console.print()
+        
+        if not Confirm.ask("⚠️  ¿Estás seguro de eliminar Docker?"):
+            console.print("[yellow]Desinstalación cancelada[/yellow]\n")
+            return False
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            
+            # Detener servicio
+            task = progress.add_task("[red]Deteniendo Docker...", total=1)
+            self.run_command("systemctl stop docker", sudo=True)
+            progress.update(task, advance=1)
+            
+            # Desinstalar paquetes
+            task = progress.add_task("[red]Eliminando paquetes...", total=1)
+            self.run_command(
+                "apt-get purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras",
+                sudo=True
+            )
+            progress.update(task, advance=1)
+            
+            # Limpiar datos
+            task = progress.add_task("[red]Eliminando datos...", total=1)
+            self.run_command("rm -rf /var/lib/docker", sudo=True)
+            self.run_command("rm -rf /var/lib/containerd", sudo=True)
+            self.run_command("rm -rf /etc/docker", sudo=True)
+            progress.update(task, advance=1)
+            
+            # Autoremove
+            task = progress.add_task("[red]Limpiando dependencias...", total=1)
+            self.run_command("apt-get autoremove -y", sudo=True)
+            progress.update(task, advance=1)
+        
+        console.print("\n✓ [bold green]Docker desinstalado completamente[/bold green]\n")
+        return True
+    
+    def show_docker_info(self) -> None:
+        """Muestra información de Docker"""
+        console.print(Panel.fit(
+            "🐳 Información de Docker",
+            style="bold blue"
+        ))
+        
+        # Verificar si está instalado
+        returncode, stdout, _ = self.run_command("docker --version 2>/dev/null")
+        if returncode != 0:
+            console.print("[yellow]Docker no está instalado[/yellow]\n")
+            return
+        
+        # Versión
+        console.print(f"[bold]Versión:[/bold] {stdout.strip()}\n")
+        
+        # Estado del servicio
+        returncode, _, _ = self.run_command("systemctl is-active docker", sudo=True)
+        status = "✓ Activo" if returncode == 0 else "✗ Inactivo"
+        style = "green" if returncode == 0 else "red"
+        console.print(f"[bold]Estado:[/bold] [{style}]{status}[/{style}]\n")
+        
+        # Información del sistema
+        console.print("[bold]Información del sistema:[/bold]")
+        self.run_command("docker info 2>/dev/null | grep -E '(Server Version|Storage Driver|Cgroup Driver|Containers|Images)'", capture_output=False)
+        console.print()
+        
+        # Contenedores en ejecución
+        console.print("[bold]Contenedores en ejecución:[/bold]")
+        returncode, stdout, _ = self.run_command("docker ps --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'")
+        if returncode == 0:
+            if stdout.strip():
+                console.print(stdout)
+            else:
+                console.print("[dim]No hay contenedores en ejecución[/dim]")
+        console.print()
+        
+        # Todos los contenedores
+        console.print("[bold]Todos los contenedores:[/bold]")
+        returncode, stdout, _ = self.run_command("docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'")
+        if returncode == 0:
+            if stdout.strip():
+                console.print(stdout)
+            else:
+                console.print("[dim]No hay contenedores[/dim]")
+        console.print()
+        
+        # Imágenes
+        console.print("[bold]Imágenes descargadas:[/bold]")
+        returncode, stdout, _ = self.run_command("docker images --format 'table {{.Repository}}:{{.Tag}}\\t{{.Size}}\\t{{.CreatedSince}}'")
+        if returncode == 0:
+            if stdout.strip():
+                console.print(stdout)
+            else:
+                console.print("[dim]No hay imágenes[/dim]")
+        console.print()
+        
+        # Volúmenes
+        console.print("[bold]Volúmenes:[/bold]")
+        returncode, stdout, _ = self.run_command("docker volume ls --format 'table {{.Name}}\\t{{.Driver}}'")
+        if returncode == 0:
+            if stdout.strip():
+                console.print(stdout)
+            else:
+                console.print("[dim]No hay volúmenes[/dim]")
+        console.print()
+    
+    def docker_menu(self) -> None:
+        """Menú de gestión de Docker"""
+        while True:
+            console.clear()
+            console.print(Panel.fit(
+                "🐳 Gestión de Docker",
+                style="bold cyan"
+            ))
+            
+            # Detectar estado de Docker
+            returncode, stdout, _ = self.run_command("docker --version 2>/dev/null")
+            docker_installed = returncode == 0
+            
+            if docker_installed:
+                version_str = stdout.strip().replace("Docker version ", "")
+                parts = version_str.split(",")
+                version = parts[0] if parts else version_str
+                console.print(f"[green]Docker {version} instalado[/green]\n")
+                
+                returncode_active, _, _ = self.run_command("systemctl is-active docker", sudo=True)
+                if returncode_active == 0:
+                    console.print("[green]✓ Servicio activo[/green]\n")
+                else:
+                    console.print("[yellow]⚠️  Servicio inactivo[/yellow]\n")
+            else:
+                console.print("[yellow]Docker no está instalado[/yellow]\n")
+            
+            # Opciones del menú
+            if docker_installed:
+                options = [
+                    ("1", "yellow", "Ver información completa y contenedores"),
+                    ("2", "yellow", "Listar contenedores en ejecución"),
+                    ("3", "yellow", "Listar todas las imágenes"),
+                    ("4", "cyan", "Iniciar/Reiniciar servicio Docker"),
+                    ("5", "cyan", "Detener servicio Docker"),
+                    ("6", "red", "Desinstalar Docker"),
+                    ("7", "magenta", "Volver al menú principal")
+                ]
+            else:
+                options = [
+                    ("1", "green", "Instalar Docker CE"),
+                    ("2", "magenta", "Volver al menú principal")
+                ]
+            
+            for key, color, value in options:
+                console.print(f"  [{color}]{key}. {value}[/{color}]")
+            
+            console.print()
+            valid_choices = [key for key, _, _ in options]
+            choice = Prompt.ask("Selecciona una opción", choices=valid_choices)
+            
+            if docker_installed:
+                if choice == "1":
+                    self.show_docker_info()
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "2":
+                    console.print(Panel.fit("🐳 Contenedores en ejecución", style="bold blue"))
+                    self.run_command("docker ps", capture_output=False)
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "3":
+                    console.print(Panel.fit("📦 Imágenes de Docker", style="bold blue"))
+                    self.run_command("docker images", capture_output=False)
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "4":
+                    console.print("[cyan]Reiniciando servicio Docker...[/cyan]")
+                    self.run_command("systemctl restart docker", sudo=True)
+                    console.print("✓ [green]Servicio reiniciado[/green]")
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "5":
+                    console.print("[cyan]Deteniendo servicio Docker...[/cyan]")
+                    self.run_command("systemctl stop docker", sudo=True)
+                    console.print("✓ [green]Servicio detenido[/green]")
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "6":
+                    self.uninstall_docker()
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "7":
+                    break
+            else:
+                if choice == "1":
+                    self.install_docker()
+                    Prompt.ask("\nPresiona Enter para continuar")
+                    
+                elif choice == "2":
+                    break
+    
+    def get_astranet_pid(self) -> tuple[bool, str]:
+        """Obtiene el PID del servidor Astranet si está corriendo"""
+        # Buscar proceso específico: debe ser el binario exacto, no shells ni otros
+        returncode, stdout, _ = self.run_command("pgrep -f '^./target/release/server_p2p' || pgrep -x server_p2p")

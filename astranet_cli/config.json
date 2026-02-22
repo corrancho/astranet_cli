@@ -1,0 +1,34 @@
+{
+  "cockroachdb": {
+    "sql_port": 26257,
+    "http_port": 8090,
+    "domain": "cockroachdb.astranet.dev",
+    "cluster_nodes": [
+      "cockroachdb.astranet.dev:26257",
+      "cockroachdb1.astranet.dev:26258",
+      "cockroachdb2.astranet.dev:26259",
+      "cockroachdb3.astranet.dev:26260"
+    ],
+    "database_name": "astranetdb",
+    "admin_user": "webadmin",
+    "admin_password": "astranet2026",
+    "certs_dir": "~/.astranet/certs",
+    "data_dir": "~/.astranet/cockroach-data",
+    "log_file": "~/.astranet/cockroach.log",
+    "ca_server_port": 8443,
+    "ca_server_email": "admin@astranet.dev"
+  },
+  "kubernetes": {
+    "enabled": false,
+    "pod_network_cidr": "10.244.0.0/16",
+    "service_cidr": "10.96.0.0/12",
+    "api_server_port": 6443,
+    "cluster_name": "astranet-k8s"
+  },
+  "docker": {
+    "enabled": false,
+    "registry": "docker.io",
+    "storage_driver": "overlay2",
+    "data_root": "/var/lib/docker"
+  }
+}
