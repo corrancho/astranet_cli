@@ -2,7 +2,7 @@
 Astranet CLI - Sistema de gestión modular
 """
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from .system_utils import SystemUtils
 from .cockroach_manager import CockroachManager

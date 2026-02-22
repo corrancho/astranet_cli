@@ -9,6 +9,7 @@ from rich.prompt import Prompt, Confirm
 from rich import box
 
 from pathlib import Path
+from . import __version__
 from .cockroach_manager import CockroachManager
 from .astranet_manager import AstranetManager
 from .k8s_manager import K8sManager
@@ -297,7 +298,7 @@ def main():
     while True:
         console.clear()
         console.print(Panel.fit(
-            "🚀 Astranet CLI - Gestión del Sistema\nAstranet v0.1.0",
+            f"🚀 Astranet CLI - Gestión del Sistema\nv{__version__}",
             style="bold cyan"
         ))
         console.print()
