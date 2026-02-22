@@ -156,6 +156,27 @@ pip install --user rich --break-system-packages
 chmod +x astranet.py
 ```
 
+### Actualizar a la última versión
+
+Si ya tienes el repositorio clonado y quieres actualizar a la última versión:
+
+```bash
+cd astranet_cli
+git pull origin master
+```
+
+Si hay conflictos con archivos locales modificados:
+```bash
+# Opción 1: Guardar cambios locales y actualizar
+git stash
+git pull origin master
+git stash pop
+
+# Opción 2: Descartar cambios locales y usar la versión remota
+git reset --hard origin/master
+git pull origin master
+```
+
 ## 🚀 Uso
 
 ### Modo Interactivo
