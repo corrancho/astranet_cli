@@ -2,6 +2,7 @@
 Docker Manager - Gestión de Docker Engine
 """
 
+import time
 import subprocess
 from pathlib import Path
 from rich.console import Console
@@ -113,35 +114,74 @@ class DockerManager(SystemUtils):
             
             # Instalar Docker
             task = progress.add_task("[cyan]Instalando Docker Engine...", total=1)
-            self.run_command(
+            returncode, stdout, stderr = self.run_command(
                 "apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin",
                 sudo=True
             )
             progress.update(task, advance=1)
             
+            if returncode != 0:
+                console.print(f"\n[red]✗ Error al instalar Docker[/red]")
+                if stderr:
+                    console.print(f"[red]{stderr}[/red]")
+                return False
+            
             # Agregar usuario al grupo docker
             task = progress.add_task("[cyan]Configurando permisos...", total=1)
             if self.sudo_user != "root":
                 self.run_command(f"usermod -aG docker {self.sudo_user}", sudo=True)
-                console.print(f"\n[yellow]Nota: Necesitarás cerrar sesión y volver a entrar para usar docker sin sudo[/yellow]")
             progress.update(task, advance=1)
             
             # Iniciar y habilitar Docker
             task = progress.add_task("[cyan]Iniciando servicio Docker...", total=1)
-            self.run_command("systemctl start docker", sudo=True)
+            # Primero asegurar que containerd esté corriendo
+            self.run_command("systemctl enable containerd", sudo=True)
+            self.run_command("systemctl start containerd", sudo=True)
+            # Luego Docker
             self.run_command("systemctl enable docker", sudo=True)
+            returncode_start, stdout_start, stderr_start = self.run_command("systemctl start docker", sudo=True)
             progress.update(task, advance=1)
         
         # Verificar instalación
         console.print("\n[cyan]Verificando instalación...[/cyan]")
         
+        # Esperar un momento para que el servicio se estabilice
+        time.sleep(2)
+        
+        # Verificar containerd primero
+        returncode_containerd, stdout_containerd, _ = self.run_command("systemctl is-active containerd")
+        if returncode_containerd != 0:
+            console.print(f"\n[yellow]⚠ containerd no está activo: {stdout_containerd.strip()}[/yellow]")
+            console.print("[cyan]Intentando reiniciar containerd...[/cyan]")
+            self.run_command("systemctl restart containerd", sudo=True)
+            time.sleep(2)
+        
         # Verificar que el servicio esté corriendo
         returncode, stdout, stderr = self.run_command("systemctl is-active docker")
         if returncode != 0:
             console.print(f"\n[red]✗ El servicio Docker no está activo[/red]")
-            console.print(f"[yellow]Estado: {stdout.strip() or stderr.strip()}[/yellow]")
-            console.print("\n[yellow]Intentando ver los logs del servicio:[/yellow]")
-            self.run_command("journalctl -u docker -n 20 --no-pager", sudo=True, capture_output=False)
+            console.print(f"[yellow]Estado: {stdout.strip() or stderr.strip()}[/yellow]\n")
+            
+            # Diagnóstico detallado
+            console.print("[cyan]Diagnóstico del problema:[/cyan]\n")
+            
+            console.print("[cyan]1. Estado del servicio Docker:[/cyan]")
+            self.run_command("systemctl status docker --no-pager -l", sudo=True, capture_output=False)
+            
+            console.print("\n[cyan]2. Estado de containerd:[/cyan]")
+            self.run_command("systemctl status containerd --no-pager -l", sudo=True, capture_output=False)
+            
+            console.print("\n[cyan]3. Logs de Docker (últimas 30 líneas):[/cyan]")
+            self.run_command("journalctl -u docker -n 30 --no-pager", sudo=True, capture_output=False)
+            
+            console.print("\n[cyan]4. Logs de containerd (últimas 30 líneas):[/cyan]")
+            self.run_command("journalctl -u containerd -n 30 --no-pager", sudo=True, capture_output=False)
+            
+            console.print("\n[yellow]Intenta ejecutar manualmente:[/yellow]")
+            console.print("  sudo systemctl restart containerd")
+            console.print("  sudo systemctl restart docker")
+            console.print("  sudo journalctl -u docker -f")
+            
             return False
         
         # Verificar versión (con sudo por si el usuario no está en el grupo docker aún)
