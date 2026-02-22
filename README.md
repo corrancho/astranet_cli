@@ -40,8 +40,14 @@ Astranet CLI es un sistema modular de gestión que proporciona una interfaz unif
 ## 🔧 Requisitos
 
 ### Sistema Operativo
-- Linux (recomendado: Ubuntu 20.04+)
+- Linux (recomendado: Ubuntu 20.04+, Debian 11+)
 - Python 3.8+
+
+**Distribuciones probadas**:
+- Ubuntu 20.04, 22.04, 24.04
+- Debian 11 (Bullseye), 12 (Bookworm)
+- Linux Mint
+- Raspbian (Raspberry Pi OS)
 
 ### Dependencias de Sistema
 ```bash
@@ -399,6 +405,43 @@ netstat -tulpn | grep 26257
 1. Verifica que todos los nodos estén en la misma red
 2. Verifica que los dominios en `config.json` sean correctos
 3. Verifica que los puertos estén abiertos en el firewall
+
+### Docker no se instala / Paquetes no disponibles
+Si recibes errores como "no tiene un candidato para la instalación":
+
+```bash
+# Verifica tu sistema operativo
+cat /etc/os-release
+
+# Limpia instalaciones previas fallidas
+sudo apt-get purge -y docker-ce docker-ce-cli containerd.io
+sudo rm -rf /var/lib/docker
+sudo rm -rf /etc/apt/sources.list.d/docker.list
+sudo rm -rf /etc/apt/keyrings/docker.gpg
+
+# Ejecuta el instalador de nuevo
+./astranet.py
+# Opción 4: Gestionar Docker > Instalar Docker CE
+```
+
+**Distribuciones soportadas**: Ubuntu, Debian, Linux Mint, Raspbian
+
+Si tu distribución no es compatible, considera instalar Docker manualmente siguiendo la [documentación oficial](https://docs.docker.com/engine/install/).
+
+### Docker instalado pero no inicia
+```bash
+# Verifica el estado
+sudo systemctl status docker
+sudo systemctl status containerd
+
+# Revisa los logs
+sudo journalctl -u docker -f
+sudo journalctl -u containerd -f
+
+# Reinicia los servicios
+sudo systemctl restart containerd
+sudo systemctl restart docker
+```
 
 ## 🤝 Contribuir
 
