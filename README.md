@@ -198,6 +198,10 @@ Al ejecutar la aplicación, verás un menú interactivo con las siguientes opcio
 5. **🐳 Gestión de Docker** (opcional)
    - Gestión de contenedores
 
+6. **🗑️ Limpiar todos los datos de Astranet**
+   - Elimina completamente todos los datos, certificados, logs y configuración
+   - ⚠️ Acción irreversible - usar con precaución
+
 ## ⚙️ Configuración
 
 La configuración se encuentra en `astranet_cli/config.json`:
@@ -312,6 +316,31 @@ Si te unes a un cluster existente:
 # Generar certificados (descargará CA automáticamente)
 # Iniciar cluster
 ```
+
+## 🗑️ Limpieza de Datos
+
+La CLI incluye una opción para **eliminar completamente todos los datos de Astranet**.
+
+### ⚠️ ADVERTENCIA
+Esta acción **NO se puede deshacer** y eliminará:
+- ✗ Todos los certificados SSL/TLS (`~/.astranet/certs/`)
+- ✗ Todos los datos de CockroachDB (`~/.astranet/cockroach-data/`)
+- ✗ Configuración de nodos
+- ✗ Logs del sistema (`~/.astranet/cockroach.log`)
+
+### Uso
+```bash
+./astranet.py
+# Selecciona: Opción 5 - Limpiar todos los datos de Astranet
+# Confirma la eliminación
+```
+
+Esta opción es útil para:
+- Comenzar desde cero con una instalación limpia
+- Resolver problemas de configuración corruptos
+- Eliminar completamente Astranet del sistema
+
+**Nota**: Debes detener todos los servicios (CockroachDB, backend, dashboard) antes de limpiar los datos.
 
 ## 🐛 Troubleshooting
 
