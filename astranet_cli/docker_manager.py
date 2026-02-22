@@ -2,11 +2,13 @@
 Docker Manager - Gestión de Docker Engine
 """
 
+import subprocess
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich import box
 
 from .system_utils import SystemUtils
