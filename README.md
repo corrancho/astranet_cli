@@ -57,9 +57,9 @@ npm o yarn
 ```
 
 ### Dependencias de Python
-```bash
-pip install rich
-```
+- `rich` - Para la interfaz de terminal interactiva
+
+La instalación se cubre en la sección de instalación con múltiples opciones según tu sistema.
 
 ## 📦 Instalación
 
@@ -110,8 +110,45 @@ ssh -T git@github.com
 </details>
 
 ### 2. Instalar dependencias de Python
+
+**Opción A: Usar el paquete del sistema (recomendado)**
 ```bash
-pip install --user rich
+# Debian/Ubuntu
+sudo apt install python3-rich
+
+# Fedora/RHEL
+sudo dnf install python3-rich
+```
+
+**Opción B: Usar pipx (recomendado para herramientas CLI)**
+```bash
+# Instalar pipx si no lo tienes
+sudo apt install pipx  # Debian/Ubuntu
+# o
+sudo dnf install pipx  # Fedora/RHEL
+
+# Instalar astranet_cli con todas sus dependencias
+pipx install .
+```
+
+**Opción C: Entorno virtual**
+```bash
+# Crear entorno virtual
+python3 -m venv .venv
+
+# Activar entorno virtual
+source .venv/bin/activate
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Nota: Deberás activar el entorno cada vez que uses la CLI
+```
+
+**Opción D: Instalación global (no recomendado)**
+```bash
+# Solo si las opciones anteriores no funcionan
+pip install --user rich --break-system-packages
 ```
 
 ### 3. Dar permisos de ejecución
@@ -277,6 +314,17 @@ Si te unes a un cluster existente:
 ```
 
 ## 🐛 Troubleshooting
+
+### Error: externally-managed-environment
+Si recibes este error al instalar con pip:
+```
+error: externally-managed-environment
+```
+
+**Solución**: Tu sistema usa PEP 668 para proteger los paquetes de Python del sistema. Usa una de estas alternativas:
+1. **Recomendado**: `sudo apt install python3-rich`
+2. Usar entorno virtual (ver sección de instalación)
+3. Usar pipx para instalar la CLI completa
 
 ### CockroachDB no se inicia
 ```bash
