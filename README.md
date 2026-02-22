@@ -240,10 +240,7 @@ La configuración se encuentra en `astranet_cli/config.json`:
     "http_port": 8090,
     "domain": "localhost",
     "cluster_nodes": [
-      "localhost:26257",
-      "localhost:26258",
-      "localhost:26259",
-      "localhost:26260"
+      "localhost:26257"
     ],
     "database_name": "astranetdb",
     "admin_user": "webadmin",
