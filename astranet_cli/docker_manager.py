@@ -62,6 +62,21 @@ class DockerManager(SystemUtils):
         
         console.print("[cyan]Instalando Docker desde repositorio oficial...[/cyan]\n")
         
+        # Detectar distribución ANTES de comenzar la instalación
+        distro = self.os_info["distro"].lower()
+        
+        # Determinar qué repositorio usar
+        if distro in ["ubuntu", "linuxmint", "pop"]:
+            repo_distro = "ubuntu"
+        elif distro in ["debian", "raspbian"]:
+            repo_distro = "debian"
+        else:
+            console.print(f"\n[yellow]⚠ Distribución '{distro}' no reconocida, usando Debian como base[/yellow]")
+            repo_distro = "debian"
+        
+        console.print(f"[cyan]Sistema detectado: {distro}[/cyan]")
+        console.print(f"[cyan]Usando repositorio: Docker para {repo_distro}[/cyan]\n")
+        
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -73,14 +88,14 @@ class DockerManager(SystemUtils):
             # Instalar dependencias
             task = progress.add_task("[cyan]Instalando dependencias...", total=1)
             self.run_command("apt-get update", sudo=True)
-            self.run_command("apt-get install -y ca-certificates curl gnupg", sudo=True)
+            self.run_command("apt-get install -y ca-certificates curl gnupg lsb-release", sudo=True)
             progress.update(task, advance=1)
             
             # Agregar clave GPG de Docker
             task = progress.add_task("[cyan]Agregando repositorio Docker...", total=1)
             self.run_command("install -m 0755 -d /etc/apt/keyrings", sudo=True)
             self.run_command(
-                "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | "
+                f"curl -fsSL https://download.docker.com/linux/{repo_distro}/gpg | "
                 "sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg",
                 sudo=False
             )
@@ -95,7 +110,7 @@ class DockerManager(SystemUtils):
             elif arch == "aarch64":
                 arch = "arm64"
             
-            distro = self.os_info["distro"]
+            # Obtener codename
             version_codename = subprocess.run(
                 "grep VERSION_CODENAME /etc/os-release | cut -d= -f2",
                 shell=True,
@@ -103,14 +118,50 @@ class DockerManager(SystemUtils):
                 text=True
             ).stdout.strip()
             
-            self.run_command(
-                f'echo "deb [arch={arch} signed-by=/etc/apt/keyrings/docker.gpg] '
-                f'https://download.docker.com/linux/ubuntu {version_codename} stable" | '
-                'sudo tee /etc/apt/sources.list.d/docker.list',
+            if not version_codename:
+                console.print(f"\n[red]✗ No se pudo detectar VERSION_CODENAME[/red]")
+                console.print("[cyan]Detectando mediante lsb_release...[/cyan]")
+                returncode, version_codename, _ = self.run_command("lsb_release -cs")
+                version_codename = version_codename.strip()
+            
+            console.print(f"\n[cyan]Configurando: {distro} ({version_codename}) - {arch}[/cyan]\n")
+            
+            # Configurar repositorio
+            repo_url = f"deb [arch={arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{repo_distro} {version_codename} stable"
+            
+            returncode, stdout, stderr = self.run_command(
+                f'echo "{repo_url}" | sudo tee /etc/apt/sources.list.d/docker.list',
                 sudo=False
             )
-            self.run_command("apt-get update", sudo=True)
+            
+            if returncode != 0:
+                console.print(f"\n[red]✗ Error al configurar repositorio[/red]")
+                console.print(f"[red]{stderr}[/red]")
+                return False
+            
+            console.print("[cyan]Actualizando caché de paquetes...[/cyan]")
+            returncode, stdout, stderr = self.run_command("apt-get update", sudo=True)
+            
+            if returncode != 0:
+                console.print(f"\n[yellow]⚠ Advertencia al actualizar repositorios[/yellow]")
+                if "NO_PUBKEY" in stderr:
+                    console.print("[yellow]Problema con las claves GPG[/yellow]")
+            
             progress.update(task, advance=1)
+            
+            # Verificar que los paquetes están disponibles
+            console.print("[cyan]Verificando disponibilidad de paquetes...[/cyan]")
+            returncode, stdout, stderr = self.run_command("apt-cache policy docker-ce", sudo=True)
+            
+            if returncode != 0 or "Candidate: (none)" in stdout:
+                console.print(f"\n[red]✗ Los paquetes de Docker no están disponibles[/red]")
+                console.print(f"[yellow]Sistema: {distro} {version_codename} ({arch})[/yellow]")
+                console.print(f"[yellow]Repositorio configurado: {repo_distro}[/yellow]\n")
+                console.print("[cyan]Contenido del archivo de repositorio:[/cyan]")
+                self.run_command("cat /etc/apt/sources.list.d/docker.list", sudo=True, capture_output=False)
+                console.print("\n[cyan]Verifica que tu versión sea compatible en:[/cyan]")
+                console.print(f"  https://docs.docker.com/engine/install/{repo_distro}/\n")
+                return False
             
             # Instalar Docker
             task = progress.add_task("[cyan]Instalando Docker Engine...", total=1)
