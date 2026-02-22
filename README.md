@@ -238,12 +238,12 @@ La configuración se encuentra en `astranet_cli/config.json`:
   "cockroachdb": {
     "sql_port": 26257,
     "http_port": 8090,
-    "domain": "cockroachdb.astranet.dev",
+    "domain": "localhost",
     "cluster_nodes": [
-      "cockroachdb.astranet.dev:26257",
-      "cockroachdb1.astranet.dev:26258",
-      "cockroachdb2.astranet.dev:26259",
-      "cockroachdb3.astranet.dev:26260"
+      "localhost:26257",
+      "localhost:26258",
+      "localhost:26259",
+      "localhost:26260"
     ],
     "database_name": "astranetdb",
     "admin_user": "webadmin",
@@ -252,6 +252,17 @@ La configuración se encuentra en `astranet_cli/config.json`:
   }
 }
 ```
+
+> **Nota**: Por defecto el cluster está configurado para localhost (todos los nodos en la misma máquina). Para un cluster distribuido en múltiples servidores, cambia `domain` y `cluster_nodes` a los dominios/IPs correspondientes:
+> ```json
+> "domain": "cockroachdb.astranet.dev",
+> "cluster_nodes": [
+>   "cockroachdb.astranet.dev:26257",
+>   "cockroachdb1.astranet.dev:26258",
+>   "cockroachdb2.astranet.dev:26259",
+>   "cockroachdb3.astranet.dev:26260"
+> ]
+> ```
 
 ### Estructura de Directorios
 
