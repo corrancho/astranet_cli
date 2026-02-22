@@ -8,6 +8,7 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich import box
 
+from pathlib import Path
 from .cockroach_manager import CockroachManager
 from .astranet_manager import AstranetManager
 from .k8s_manager import K8sManager
@@ -191,6 +192,100 @@ def show_astranet_menu(astranet: AstranetManager):
             break
 
 
+def clean_all_astranet_data():
+    """Elimina todos los datos y archivos de Astranet"""
+    console.clear()
+    console.print(Panel.fit(
+        "🗑️  Limpieza Total de Datos de Astranet",
+        style="bold red"
+    ))
+    console.print()
+    
+    # Lista de directorios/archivos a eliminar
+    items_to_remove = [
+        (Path.home() / ".astranet", "Directorio principal (~/.astranet)"),
+        (Path.home() / ".astranet" / "certs", "  • Certificados SSL/TLS"),
+        (Path.home() / ".astranet" / "cockroach-data", "  • Datos de CockroachDB"),
+        (Path.home() / ".astranet" / "cockroach.log", "  • Logs de CockroachDB"),
+    ]
+    
+    console.print("[yellow]⚠️  Se eliminarán los siguientes archivos y directorios:[/yellow]\n")
+    
+    existing_items = []
+    for path, description in items_to_remove:
+        if path.exists():
+            size = ""
+            if path.is_dir():
+                # Contar archivos
+                try:
+                    file_count = sum(1 for _ in path.rglob('*') if _.is_file())
+                    size = f" ({file_count} archivos)"
+                except:
+                    size = ""
+            elif path.is_file():
+                # Tamaño del archivo
+                try:
+                    size_bytes = path.stat().st_size
+                    if size_bytes < 1024:
+                        size = f" ({size_bytes}B)"
+                    elif size_bytes < 1024*1024:
+                        size = f" ({size_bytes/1024:.1f}KB)"
+                    else:
+                        size = f" ({size_bytes/(1024*1024):.1f}MB)"
+                except:
+                    size = ""
+            
+            console.print(f"  ✓ {description}{size}")
+            existing_items.append(path)
+    
+    if not existing_items:
+        console.print("[green]No hay datos de Astranet para eliminar.[/green]\n")
+        input("Presiona Enter para continuar...")
+        return
+    
+    console.print()
+    console.print("[bold red]⚠️  ADVERTENCIA: Esta acción NO se puede deshacer[/bold red]")
+    console.print("[yellow]Se eliminarán:[/yellow]")
+    console.print("  • Todos los certificados SSL/TLS")
+    console.print("  • Todos los datos de CockroachDB")
+    console.print("  • Configuración de nodos")
+    console.print("  • Logs del sistema")
+    console.print()
+    
+    if not Confirm.ask("[bold red]¿Estás SEGURO de que quieres eliminar todos los datos?[/bold red]"):
+        console.print("\n[yellow]Operación cancelada[/yellow]\n")
+        input("Presiona Enter para continuar...")
+        return
+    
+    console.print()
+    console.print("[cyan]Eliminando datos...[/cyan]\n")
+    
+    import shutil
+    errors = []
+    
+    # Eliminar el directorio principal (esto elimina todo dentro)
+    main_dir = Path.home() / ".astranet"
+    if main_dir.exists():
+        try:
+            shutil.rmtree(main_dir)
+            console.print(f"[green]✓ Eliminado: {main_dir}[/green]")
+        except Exception as e:
+            console.print(f"[red]✗ Error eliminando {main_dir}: {e}[/red]")
+            errors.append((main_dir, str(e)))
+    
+    console.print()
+    
+    if errors:
+        console.print("[yellow]⚠️  Algunos elementos no pudieron eliminarse:[/yellow]")
+        for path, error in errors:
+            console.print(f"  • {path}: {error}")
+    else:
+        console.print("[bold green]✓ Todos los datos de Astranet han sido eliminados correctamente[/bold green]")
+    
+    console.print()
+    input("Presiona Enter para continuar...")
+
+
 def main():
     """Punto de entrada principal"""
     # Inicializar managers
@@ -211,10 +306,11 @@ def main():
         console.print("  [green]2. Gestionar Astranet (Backend/Dashboard)[/green]")
         console.print("  [green]3. Gestionar Kubernetes[/green]")
         console.print("  [green]4. Gestionar Docker[/green]")
+        console.print("  [red]5. Limpiar todos los datos de Astranet[/red]")
         console.print("  [red]0. Salir[/red]")
         console.print()
         
-        choice = Prompt.ask("Selecciona una opción", choices=["1", "2", "3", "4", "0"])
+        choice = Prompt.ask("Selecciona una opción", choices=["1", "2", "3", "4", "5", "0"])
         
         if choice == "1":
             show_cockroach_menu(crdb)
@@ -224,6 +320,8 @@ def main():
             k8s.k8s_menu()
         elif choice == "4":
             docker.docker_menu()
+        elif choice == "5":
+            clean_all_astranet_data()
         elif choice == "0":
             console.print("\n[cyan]👋 ¡Hasta luego![/cyan]\n")
             break
