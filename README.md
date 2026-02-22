@@ -64,10 +64,50 @@ pip install rich
 ## 📦 Instalación
 
 ### 1. Clonar el repositorio
+
+**Opción A: HTTPS (recomendado para empezar)**
+```bash
+git clone https://github.com/corrancho/astranet_cli.git
+cd astranet_cli
+```
+
+**Opción B: SSH (requiere configuración previa)**
 ```bash
 git clone git@github.com:corrancho/astranet_cli.git
 cd astranet_cli
 ```
+
+<details>
+<summary>📌 Configurar SSH para GitHub (si usas la Opción B)</summary>
+
+Si obtienes el error `Permission denied (publickey)`, necesitas configurar tu clave SSH:
+
+```bash
+# 1. Generar clave SSH (si no tienes una)
+ssh-keygen -t ed25519 -C "tu_email@example.com"
+# Presiona Enter para aceptar la ubicación por defecto
+# Opcionalmente agrega una contraseña
+
+# 2. Iniciar el agente SSH
+eval "$(ssh-agent -s)"
+
+# 3. Agregar la clave al agente
+ssh-add ~/.ssh/id_ed25519
+
+# 4. Copiar la clave pública
+cat ~/.ssh/id_ed25519.pub
+# Copia todo el contenido que aparece
+
+# 5. Agregar la clave a GitHub
+# Ve a: https://github.com/settings/keys
+# Click en "New SSH key"
+# Pega la clave pública copiada
+
+# 6. Verificar la conexión
+ssh -T git@github.com
+```
+
+</details>
 
 ### 2. Instalar dependencias de Python
 ```bash
