@@ -160,74 +160,22 @@ class DockerManager(SystemUtils):
                     console.print(f"[red]{stderr}[/red]")
                 return False
             
-            # 5. Configurar permisos
+            # 5. Configurar permisos - agregar usuario al grupo docker para no necesitar sudo
             task = progress.add_task("[cyan]Configurando permisos...", total=1)
             
-            # Determinar usuario(s) a configurar para Docker sin sudo
-            docker_users = set()
-            
-            # Si se ejecutó con sudo, agregar el usuario original
+            # Detectar el usuario real (el que ejecutó sudo)
+            docker_user = None
             if self.sudo_user and self.sudo_user != "root":
-                docker_users.add(self.sudo_user)
+                docker_user = self.sudo_user
+            else:
+                current_user = os.environ.get('USER', 'root')
+                if current_user != "root":
+                    docker_user = current_user
             
-            # Si USER no es root, agregarlo también
-            current_user = os.environ.get('USER', 'root')
-            if current_user != "root":
-                docker_users.add(current_user)
+            if docker_user:
+                self.run_command(f"usermod -aG docker {docker_user}", sudo=True)
             
             progress.update(task, advance=1)
-        
-        # Fuera del progress bar para poder interactuar con el usuario
-        # Si estamos como root directo y no hay usuarios detectados, preguntar
-        if not docker_users:
-            console.print("\n[yellow]Ejecutando como root - Docker ya funciona sin restricciones.[/yellow]")
-            try:
-                add_user = Confirm.ask(
-                    "[cyan]¿Deseas configurar un usuario para usar Docker sin sudo?[/cyan]",
-                    default=True
-                )
-                if add_user:
-                    docker_username = Prompt.ask(
-                        "[cyan]Nombre del usuario[/cyan]",
-                        default=""
-                    ).strip()
-                    if docker_username:
-                        # Verificar que el usuario existe
-                        ret, _, _ = self.run_command(f"id {docker_username}")
-                        if ret == 0:
-                            docker_users.add(docker_username)
-                        else:
-                            # Crear el usuario
-                            create_user = Confirm.ask(
-                                f"[yellow]El usuario '{docker_username}' no existe. ¿Deseas crearlo?[/yellow]",
-                                default=True
-                            )
-                            if create_user:
-                                self.run_command(f"useradd -m -s /bin/bash {docker_username}", sudo=True)
-                                console.print(f"[green]✓ Usuario '{docker_username}' creado[/green]")
-                                # Establecer contraseña
-                                console.print(f"[cyan]Establece la contraseña para '{docker_username}':[/cyan]")
-                                self.run_command(f"passwd {docker_username}", sudo=True, capture_output=False)
-                                docker_users.add(docker_username)
-            except (KeyboardInterrupt, EOFError):
-                pass
-        
-        # Agregar usuarios al grupo docker
-        for user in docker_users:
-            self.run_command(f"usermod -aG docker {user}", sudo=True)
-            console.print(f"[green]✓ Usuario '{user}' agregado al grupo docker[/green]")
-        
-        if docker_users:
-            console.print(f"\n[yellow]ℹ Los usuarios deben cerrar sesión y volver a entrar para que el grupo docker surta efecto.[/yellow]")
-            console.print(f"[yellow]  O ejecutar: newgrp docker[/yellow]")
-        
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console
-        ) as progress:
             # 6. Iniciar servicios
             task = progress.add_task("[cyan]Iniciando servicio Docker...", total=1)
             self.run_command("systemctl enable docker", sudo=True)
@@ -284,8 +232,12 @@ class DockerManager(SystemUtils):
             if returncode_compose == 0:
                 console.print(f"✓ [bold green]Docker Compose: {stdout_compose.strip()}[/bold green]")
             
-            console.print(f"\n[yellow]Nota: Si quieres usar Docker sin sudo, cierra sesión y vuelve a entrar.[/yellow]")
-            console.print(f"[yellow]O ejecuta: newgrp docker[/yellow]\n")
+            if docker_user:
+                console.print(f"\n✓ [green]Usuario '{docker_user}' agregado al grupo docker[/green]")
+                console.print(f"[yellow]Para usar Docker sin sudo, cierra sesión y vuelve a entrar.[/yellow]")
+                console.print(f"[yellow]O ejecuta: newgrp docker[/yellow]\n")
+            else:
+                console.print(f"\n[cyan]Ejecutando como root - Docker funciona directamente.[/cyan]\n")
             return True
         else:
             console.print(f"\n✗ [red]Error al verificar Docker[/red]")
