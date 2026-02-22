@@ -133,12 +133,37 @@ class DockerManager(SystemUtils):
             progress.update(task, advance=1)
         
         # Verificar instalación
-        returncode, stdout, _ = self.run_command("docker --version")
+        console.print("\n[cyan]Verificando instalación...[/cyan]")
+        
+        # Verificar que el servicio esté corriendo
+        returncode, stdout, stderr = self.run_command("systemctl is-active docker")
+        if returncode != 0:
+            console.print(f"\n[red]✗ El servicio Docker no está activo[/red]")
+            console.print(f"[yellow]Estado: {stdout.strip() or stderr.strip()}[/yellow]")
+            console.print("\n[yellow]Intentando ver los logs del servicio:[/yellow]")
+            self.run_command("journalctl -u docker -n 20 --no-pager", sudo=True, capture_output=False)
+            return False
+        
+        # Verificar versión (con sudo por si el usuario no está en el grupo docker aún)
+        returncode, stdout, stderr = self.run_command("docker --version", sudo=True)
         if returncode == 0:
-            console.print(f"\n✓ [bold green]Docker instalado correctamente: {stdout.strip()}[/bold green]\n")
+            console.print(f"\n✓ [bold green]Docker instalado correctamente: {stdout.strip()}[/bold green]")
+            
+            # Verificar Docker Compose
+            returncode_compose, stdout_compose, _ = self.run_command("docker compose version", sudo=True)
+            if returncode_compose == 0:
+                console.print(f"✓ [bold green]Docker Compose: {stdout_compose.strip()}[/bold green]")
+            
+            console.print(f"\n[yellow]Nota: Si quieres usar Docker sin sudo, cierra sesión y vuelve a entrar.[/yellow]")
+            console.print(f"[yellow]O ejecuta: newgrp docker[/yellow]\n")
             return True
         else:
-            console.print("\n✗ [red]Error al instalar Docker[/red]\n")
+            console.print(f"\n✗ [red]Error al verificar Docker[/red]")
+            if stderr:
+                console.print(f"[red]Error: {stderr.strip()}[/red]")
+            console.print("\n[yellow]Intentando diagnosticar el problema...[/yellow]")
+            self.run_command("which docker", sudo=True, capture_output=False)
+            self.run_command("systemctl status docker --no-pager", sudo=True, capture_output=False)
             return False
     
     def uninstall_docker(self) -> bool:
